@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VendorGuard</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#f5f6f8;color:#1c2330}
+header{background:#1c2330;color:#fff;padding:16px 28px;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:20px}header small{opacity:.7}
+main{max-width:1050px;margin:24px auto;padding:0 16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:22px}
+.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px #0001}
+.card b{font-size:30px;display:block}.card span{color:#667}
+.card.red b{color:#c62828}.card.amber b{color:#ef6c00}
+table{width:100%;background:#fff;border-radius:12px;border-collapse:collapse;box-shadow:0 1px 3px #0001;overflow:hidden}
+th,td{padding:12px 14px;text-align:left;font-size:14px;border-bottom:1px solid #eef}th{background:#fafbfc;color:#667;font-weight:600}
+.badge{padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+.Low,.Active{background:#e6f4ea;color:#1e7d32}.Medium,.Upcoming{background:#fff4e0;color:#b26a00}
+.High,.Act-now,.Notice-window-missed,.Expired{background:#fdeaea;color:#c62828}
+button{border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px}
+.primary{background:#2b59ff;color:#fff}.ghost{background:#eef1f6}.danger{background:#fdeaea;color:#c62828}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+dialog{border:0;border-radius:14px;padding:22px;width:440px;max-width:95vw}
+label{display:block;font-size:12px;color:#667;margin:10px 0 3px}
+input,select,textarea{width:100%;padding:9px;border:1px solid #d5d9e2;border-radius:8px;font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.empty{padding:30px;text-align:center;color:#889}
+</style></head><body>
+<header><h1>🛡️ VendorGuard</h1><small>Vendor renewal &amp; risk tracker</small></header>
+<main>
+<div class="cards" id="cards"></div>
+<div class="top"><h3 style="margin:0">Vendors <small style="color:#889;font-weight:400">(sorted by action date)</small></h3>
+<button class="primary" onclick="openForm()">+ Add vendor</button></div>
+<table><thead><tr><th>Vendor</th><th>Contract ends</th><th>Act by</th><th>Status</th><th>Risk</th><th></th></tr></thead>
+<tbody id="rows"></tbody></table>
+</main>
+<dialog id="dlg"><form method="dialog" onsubmit="return false">
+<h3 id="dtitle" style="margin-top:0">Vendor</h3>
+<label>Vendor name</label><input id="f_name">
+<div class="row"><div><label>Contract start</label><input type="date" id="f_start"></div>
+<div><label>Contract end</label><input type="date" id="f_end"></div></div>
+<div class="row"><div><label>Notice period (days)</label><input type="number" id="f_notice" min="0"></div>
+<div><label>Risk level</label><select id="f_risk"><option>Low</option><option>Medium</option><option>High</option></select></div></div>
+<label>Payment terms</label><input id="f_pay">
+<label>Notes (obligations, risks)</label><textarea id="f_notes" rows="3"></textarea>
+<div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">
+<button type="button" class="danger" id="delBtn" onclick="del()">Delete</button>
+<span><button type="button" class="ghost" onclick="dlg.close()">Cancel</button>
+<button type="button" class="primary" onclick="save()">Save</button></span></div>
+</form></dialog>
+<script>
+const $=id=>document.getElementById(id);let cache=[],editId=null;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cls=s=>s.replace(/ /g,'-');
+function ago(d){return d<0?`${-d} days overdue`:d===0?'today':`in ${d} days`}
+async function load(){
+  const [d,v]=await Promise.all([fetch('/api/dashboard').then(r=>r.json()),fetch('/api/vendors').then(r=>r.json())]);
+  cache=v;const n=d.next_deadline;
+  $('cards').innerHTML=`
+   <div class="card"><b>${d.total}</b><span>Total vendors</span></div>
+   <div class="card amber"><b>${d.act_soon}</b><span>Need action within 60 days</span></div>
+   <div class="card red"><b>${d.high_risk}</b><span>High-risk vendors</span></div>
+   <div class="card red"><b>${d.missed}</b><span>Notice window missed</span></div>
+   <div class="card"><b style="font-size:20px">${n?esc(n.name)+' · '+ago(n.days):'None'}</b><span>Next deadline</span></div>`;
+  $('rows').innerHTML=v.length?v.map(x=>`<tr>
+   <td><b>${esc(x.name)}</b><br><small style="color:#889">${esc(x.payment_terms)}</small></td>
+   <td>${x.contract_end}</td><td>${x.act_by}<br><small style="color:#889">${ago(x.days_to_act)}</small></td>
+   <td><span class="badge ${cls(x.status)}">${x.status}</span></td>
+   <td><span class="badge ${x.risk_level}">${x.risk_level}</span></td>
+   <td><button class="ghost" onclick="openForm(${x.id})">Edit</button></td></tr>`).join('')
+   :'<tr><td colspan="6" class="empty">No vendors yet. Ask Claude to add one.</td></tr>';
+}
+function openForm(id){
+  editId=id||null;const x=cache.find(v=>v.id===id)||{};
+  $('dtitle').textContent=id?'Edit vendor':'Add vendor';$('delBtn').style.display=id?'':'none';
+  $('f_name').value=x.name||'';$('f_start').value=x.contract_start||'';$('f_end').value=x.contract_end||'';
+  $('f_notice').value=x.notice_days??30;$('f_risk').value=x.risk_level||'Medium';
+  $('f_pay').value=x.payment_terms||'';$('f_notes').value=x.notes||'';dlg.showModal();
+}
+async function save(){
+  const body={name:$('f_name').value,contract_start:$('f_start').value||null,contract_end:$('f_end').value,
+   notice_days:+$('f_notice').value||0,risk_level:$('f_risk').value,payment_terms:$('f_pay').value,notes:$('f_notes').value};
+  if(!body.name||!body.contract_end)return alert('Name and contract end are required');
+  const r=await fetch(editId?`/api/vendors/${editId}`:'/api/vendors',{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok)return alert((await r.json()).detail||'Error');dlg.close();load();
+}
+async function del(){if(confirm('Delete this vendor?')){await fetch(`/api/vendors/${editId}`,{method:'DELETE'});dlg.close();load()}}
+load();setInterval(()=>{if(!dlg.open)load()},5000);
+</script></body></html>
