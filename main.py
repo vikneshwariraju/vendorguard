@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 # ---------- database ----------
 DB_URL = os.getenv("DATABASE_URL", "sqlite:///./vendorguard.db")
 if DB_URL.startswith("postgres://"):
-    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+    DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DB_URL.startswith("postgresql://"):
+    DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 engine = create_engine(DB_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
