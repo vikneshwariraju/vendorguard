@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from sqlalchemy import Column, Date, Integer, String, Text, create_engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
@@ -103,7 +104,8 @@ def dashboard(db: Session) -> dict:
 
 
 # ---------- MCP server (the plug Claude uses) ----------
-mcp = FastMCP("VendorGuard", stateless_http=True, json_response=True)
+mcp = FastMCP("VendorGuard", stateless_http=True, json_response=True,
+              transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
 mcp.settings.streamable_http_path = "/"
 
 
